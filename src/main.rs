@@ -14,13 +14,17 @@ fn main() -> eframe::Result<()> {
 struct BraidApp {
     time: f32,
     braid : Braid,
+    show_load_popup : bool,
+    load_error : Option<String>
 }
 
 impl BraidApp{
-    fn new() -> BraidApp {
-        BraidApp {
+    fn new() -> Self {
+        Self {
             time: 0.0,
             braid: Braid::new(),
+            show_load_popup : false,
+            load_error : None,
         }
     }
 }
@@ -31,6 +35,11 @@ impl eframe::App for BraidApp {
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             egui::containers::menu::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
+                    if ui.button("Load braid…").clicked() {
+                        self.show_load_popup = true;
+                        ui.close();
+                    }
+
                     if ui.button("Quit").clicked() {
                         std::process::exit(0);
                     }
@@ -55,6 +64,39 @@ impl eframe::App for BraidApp {
             });
             
         });
+
+        // braid loading
+        if self.show_load_popup {
+            egui::Window::new("Load braid")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.label("Load a braid from a text file.");
+        
+                    if ui.button("Choose file…").clicked() {
+                        match Braid::load_braid_from_file() {
+                            Ok(braid) => {
+                                self.braid = braid;
+                                self.show_load_popup = false;
+                                self.load_error = None;
+                            }
+                            Err(e) => {
+                                self.load_error = Some(e);
+                            }
+                        }
+                    }
+        
+                    if let Some(err) = &self.load_error {
+                        ui.colored_label(egui::Color32::RED, err);
+                    }
+        
+                    if ui.button("Cancel").clicked() {
+                        self.show_load_popup = false;
+                        self.load_error = None;
+                    }
+                });
+        }
+        
     }
 }
 
@@ -161,4 +203,60 @@ impl Braid{
 
 
     }
+
+    fn load_braid_from_file() -> Result<Braid, String> {
+        let file = rfd::FileDialog::new()
+            .add_filter("Braid file", &["braid"])
+            .pick_file()
+            .ok_or("No file selected")?;
+    
+        let text = std::fs::read_to_string(file)
+            .map_err(|e| e.to_string())?;
+    
+        Braid::parse_braid(&text)
+    }
+
+
+    fn parse_braid(input: &str) -> Result<Braid, String> {
+        let mut lines = input
+            .lines()
+            .map(|l| l.split('#').next().unwrap().trim()) // remove comments
+            .filter(|l| !l.is_empty());
+    
+        // Parse number of strands
+        let strands: u32 = lines
+            .next()
+            .ok_or("Missing strand count")?
+            .parse()
+            .map_err(|_| "Invalid strand count")?;
+        if strands < 2 {
+            return Err("A braid must have at least 2 strands".into());
+        }
+    
+        // Parse remaining crossings (all remaining lines, split by whitespace)
+        let mut crossings: Vec<i32> = Vec::new();
+        for line in lines {
+            for word in line.split_whitespace() {
+                let g: i32 = word
+                    .parse()
+                    .map_err(|_| format!("Invalid crossing value '{}'", word))?;
+                crossings.push(g);
+            }
+        }
+    
+        // Validate generators
+        let max_gen = strands as i32 - 1;
+        for &g in &crossings {
+            if g == 0 || g.abs() > max_gen {
+                return Err(format!(
+                    "Invalid generator {}: must be in range ±[1, {}]",
+                    g, max_gen
+                ));
+            }
+        }
+    
+        Ok(Braid { strands, crossings })
+    }
+    
+    
 }
