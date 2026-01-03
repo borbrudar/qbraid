@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use egui::{Painter, Response};
 
 #[derive(Default)]
@@ -115,6 +117,15 @@ impl Braid{
         Braid::parse_braid(&text)
     }
 
+    pub fn save_braid_to_file(braid: &Braid, path : &Path) -> Result<(), String> {
+        let mut content = format!("{}\n", braid.strands);
+        for g in &braid.crossings {
+            content.push_str(&format!("{} ", g));
+        }
+        content.push('\n');
+    
+        std::fs::write(path, content).map_err(|e| e.to_string())
+    }
 
     fn parse_braid(input: &str) -> Result<Braid, String> {
         let mut lines = input

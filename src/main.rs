@@ -44,6 +44,19 @@ impl eframe::App for BraidApp {
                         ui.close();
                     }
 
+                    if ui.button("Save braid…").clicked() {
+                        if let Some(path) = rfd::FileDialog::new()
+                            .set_file_name("my_braid.braid")
+                            .add_filter("Braid files", &["braid"])
+                            .save_file()
+                        {
+                            if let Err(e) = Braid::save_braid_to_file(&self.braid, &path) {
+                                self.load_error = Some(e.to_string());
+                            }
+                        }
+                        ui.close();
+                    }
+
                     if ui.button("Quit").clicked() {
                         std::process::exit(0);
                     }
