@@ -1,7 +1,22 @@
 mod braid;
+mod fibonacci;
+mod tree;
 use braid::*;
 use eframe::egui;
 use egui::{Painter, Response};
+use num_complex::Complex64;
+
+use crate::{
+    fibonacci::FusionBasis,
+    tree::{FibStep, braid_to_fib_steps, compute_total},
+};
+
+#[derive(Default)]
+enum Tab {
+    #[default]
+    General,
+    Fibonacci3,
+}
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions::default();
@@ -15,20 +30,25 @@ fn main() -> eframe::Result<()> {
 #[derive(Default)]
 struct BraidApp {
     time: f32,
-    braid : Braid,
-    show_load_popup : bool,
-    load_error : Option<String>,
-    new_crossing : i32,
+    braid: Braid,
+    show_load_popup: bool,
+    load_error: Option<String>,
+    new_crossing: i32,
+
+    tab: Tab,
+    fib_steps: Vec<FibStep>,
 }
 
-impl BraidApp{
+impl BraidApp {
     fn new() -> Self {
         Self {
             time: 0.0,
             braid: Braid::new(),
-            show_load_popup : false,
-            load_error : None,
-            new_crossing : 1,
+            show_load_popup: false,
+            load_error: None,
+            new_crossing: 1,
+            tab: Tab::General,
+            fib_steps: vec![],
         }
     }
 }
@@ -37,6 +57,17 @@ impl eframe::App for BraidApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Top panel with modern MenuBar
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
+            ui.menu_button("Mode", |ui| {
+                if ui.button("General braid").clicked() {
+                    self.tab = Tab::General;
+                    ui.close();
+                }
+                if ui.button("3-anyon Fibonacci").clicked() {
+                    self.tab = Tab::Fibonacci3;
+                    ui.close();
+                }
+            });
+
             egui::containers::menu::MenuBar::new().ui(ui, |ui| {
                 ui.menu_button("File", |ui| {
                     if ui.button("Load braid…").clicked() {
@@ -70,28 +101,29 @@ impl eframe::App for BraidApp {
         });
 
         // braid operations
-        egui::SidePanel::right("controls").show(ctx,|ui|{
+        egui::SidePanel::right("controls").show(ctx, |ui| {
             ui.heading("Braid Editor");
 
-            if ui.button("Add strand").clicked() {
-                self.braid.strands += 1;
-            }
-        
-            if ui.button("Remove strand").clicked() {
-                if self.braid.strands > 2 {
-                    self.braid.strands -= 1;
-                    let mut new_vec = Vec::new();
-                    for u in &self.braid.crossings {
-                        if (u.abs() as u32) < self.braid.strands {
-                            new_vec.push(u.clone());
-                        }
+            if let Tab::Fibonacci3 = self.tab {
+                self.braid.strands = 3;
+                ui.label("Strands fixed to 3 (Fibonacci mode)");
+            } else {
+                if ui.button("Add strand").clicked() {
+                    self.braid.strands += 1;
+                }
+
+                if ui.button("Remove strand").clicked() {
+                    if self.braid.strands > 2 {
+                        self.braid.strands -= 1;
+                        self.braid
+                            .crossings
+                            .retain(|u| (u.abs() as u32) < self.braid.strands);
                     }
-                    self.braid.crossings = new_vec;
                 }
             }
-        
+
             ui.separator(); // visual spacing
-        
+
             ui.horizontal(|ui| {
                 let max_gen = self.braid.strands as i32 - 1;
                 // Ensure new_gen is valid in current strands
@@ -99,7 +131,9 @@ impl eframe::App for BraidApp {
                     self.new_crossing = 1;
                 }
 
-                ui.add(egui::Slider::new(&mut self.new_crossing, -max_gen..=max_gen).text("generator"));
+                ui.add(
+                    egui::Slider::new(&mut self.new_crossing, -max_gen..=max_gen).text("generator"),
+                );
                 if ui.button("Add crossing").clicked() {
                     let max_gen = self.braid.strands as i32 - 1;
                     if self.new_crossing != 0 && self.new_crossing.abs() <= max_gen {
@@ -107,12 +141,11 @@ impl eframe::App for BraidApp {
                     }
                 }
             });
-            
-        
+
             if ui.button("Remove last crossing").clicked() {
                 self.braid.crossings.pop();
             }
-        
+
             ui.separator();
             ui.label(format!("Strands: {}", self.braid.strands));
             ui.label(format!("Crossings: {}", self.braid.crossings.len()));
@@ -120,17 +153,64 @@ impl eframe::App for BraidApp {
 
         // Central content
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::both().show(ui, |ui| {
-                let braid_size = egui::vec2(700.0, 1500.0);
-            
-                let (rect, painter) =
-                    ui.allocate_painter(braid_size, egui::Sense::hover());
-                
-                self.braid.draw(rect, painter);
-            });
-            
-        });
+            ui.columns(2, |columns| {
+                // LEFT: braid
+                columns[0].heading("Braid");
 
+                egui::ScrollArea::both().show(&mut columns[0], |ui| {
+                    let braid_size = egui::vec2(600.0, 1200.0);
+                    let (rect, painter) = ui.allocate_painter(braid_size, egui::Sense::hover());
+                    self.braid.draw(rect, painter);
+                });
+
+                // RIGHT: Fibonacci stuff
+                columns[1].heading("Fibonacci Anyons");
+
+                match self.tab {
+                    Tab::General => {
+                        columns[1].label("Switch to Fibonacci mode.");
+                    }
+
+                    Tab::Fibonacci3 => {
+                        if self.braid.strands != 3 {
+                            columns[1].label("This mode requires exactly 3 strands.");
+                            return;
+                        }
+
+                        self.fib_steps = braid_to_fib_steps(&self.braid.crossings);
+
+                        egui::ScrollArea::vertical().show(&mut columns[1], |ui| {
+                            for (i, step) in self.fib_steps.iter().enumerate() {
+                                ui.heading(format!("Step {}: {}", i, step.label));
+
+                                // draw braid prefix
+                                let temp_braid = Braid {
+                                    strands: 3,
+                                    crossings: step.braid_prefix.clone(),
+                                };
+
+                                let (rect, painter) = ui.allocate_painter(
+                                    egui::vec2(200.0, 200.0),
+                                    egui::Sense::hover(),
+                                );
+
+                                temp_braid.draw(rect, painter);
+
+                                // draw fusion tree
+                                self.draw_fusion_tree(ui, step);
+
+                                ui.separator();
+                            }
+
+                            let total = compute_total(&self.fib_steps);
+
+                            ui.heading("Final state vector:");
+                            ui.monospace(format!("[{:.3}, {:.3}]", total[0], total[1]));
+                        });
+                    }
+                }
+            });
+        });
         // braid loading
         if self.show_load_popup {
             egui::Window::new("Load braid")
@@ -138,7 +218,7 @@ impl eframe::App for BraidApp {
                 .resizable(false)
                 .show(ctx, |ui| {
                     ui.label("Load a braid from a text file.");
-        
+
                     if ui.button("Choose file…").clicked() {
                         match Braid::load_braid_from_file() {
                             Ok(braid) => {
@@ -151,17 +231,86 @@ impl eframe::App for BraidApp {
                             }
                         }
                     }
-        
+
                     if let Some(err) = &self.load_error {
                         ui.colored_label(egui::Color32::RED, err);
                     }
-        
+
                     if ui.button("Cancel").clicked() {
                         self.show_load_popup = false;
                         self.load_error = None;
                     }
                 });
         }
-        
+    }
+}
+impl BraidApp {
+    fn _draw_braid_tab(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {}
+    fn draw_fusion_tree(&self, ui: &mut egui::Ui, step: &FibStep) {
+        let (resp, painter) = ui.allocate_painter(egui::vec2(220.0, 160.0), egui::Sense::hover());
+
+        let rect = resp.rect;
+
+        let top_y = rect.top() + 20.0;
+        let mid_y = rect.center().y;
+        let bot_y = rect.bottom() - 20.0;
+
+        let x1 = rect.left() + 40.0;
+        let x2 = rect.center().x;
+        let x3 = rect.right() - 40.0;
+
+        let p1 = egui::pos2(x1, top_y);
+        let p2 = egui::pos2(x2, top_y);
+        let p3 = egui::pos2(x3, top_y);
+
+        match step.state.basis {
+            FusionBasis::Left => {
+                let mid = egui::pos2((x1 + x2) / 2.0, mid_y);
+                let root = egui::pos2((mid.x + x3) / 2.0, bot_y);
+
+                painter.line_segment([p1, mid], (2.0, egui::Color32::WHITE));
+                painter.line_segment([p2, mid], (2.0, egui::Color32::WHITE));
+                painter.line_segment([mid, root], (2.0, egui::Color32::WHITE));
+                painter.line_segment([p3, root], (2.0, egui::Color32::WHITE));
+
+                Self::draw_channel(&painter, mid, &step.state.vec);
+            }
+            FusionBasis::Right => {
+                let mid = egui::pos2((x2 + x3) / 2.0, mid_y);
+                let root = egui::pos2((x1 + mid.x) / 2.0, bot_y);
+
+                painter.line_segment([p2, mid], (2.0, egui::Color32::WHITE));
+                painter.line_segment([p3, mid], (2.0, egui::Color32::WHITE));
+                painter.line_segment([mid, root], (2.0, egui::Color32::WHITE));
+                painter.line_segment([p1, root], (2.0, egui::Color32::WHITE));
+
+                Self::draw_channel(&painter, mid, &step.state.vec);
+            }
+        }
+
+        for p in [p1, p2, p3] {
+            painter.text(
+                p,
+                egui::Align2::CENTER_CENTER,
+                "τ",
+                egui::FontId::proportional(14.0),
+                egui::Color32::WHITE,
+            );
+        }
+    }
+
+    fn draw_channel(painter: &egui::Painter, pos: egui::Pos2, v: &[Complex64; 2]) {
+        let prob0 = v[0].norm_sqr();
+        let prob1 = v[1].norm_sqr();
+
+        let text = format!("1:{:.2} τ:{:.2}", prob0, prob1);
+
+        painter.text(
+            pos,
+            egui::Align2::CENTER_CENTER,
+            text,
+            egui::FontId::proportional(13.0),
+            egui::Color32::LIGHT_BLUE,
+        );
     }
 }
