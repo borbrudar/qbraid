@@ -14,7 +14,8 @@ pub struct FibStep {
     pub op: FibOp,
     pub label: String,
     pub state: FibState,
-    pub braid_prefix: Vec<i32>,
+    pub braid_remaining: Vec<i32>,
+    pub matrix: [[Complex64; 2]; 2], // NEW
 }
 
 fn invert(m: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2] {
@@ -29,23 +30,30 @@ pub fn braid_to_fib_steps(crossings: &[i32]) -> Vec<FibStep> {
     let mut steps = vec![];
     let mut state = FibState::new();
 
-    let mut prefix = vec![];
+    let mut remaining = crossings.to_vec();
 
-    for &g in crossings {
-        prefix.push(g);
-
+    for &g in crossings.iter().rev() {
+        // for EACH operation, push step with CURRENT braid
         match g {
-            1 => apply_r(&mut steps, &mut state, &prefix),
-            -1 => apply_r_inv(&mut steps, &mut state, &prefix),
+            1 => {
+                apply_r_inv(&mut steps, &mut state, &remaining);
+                remaining.pop();
+            }
+            -1 => {
+                apply_r(&mut steps, &mut state, &remaining);
+                remaining.pop();
+            }
             2 => {
-                apply_f(&mut steps, &mut state, &prefix);
-                apply_r(&mut steps, &mut state, &prefix);
-                apply_f_inv(&mut steps, &mut state, &prefix);
+                apply_f(&mut steps, &mut state, &remaining);
+                apply_r_inv(&mut steps, &mut state, &remaining);
+                apply_f_inv(&mut steps, &mut state, &remaining);
+                remaining.pop();
             }
             -2 => {
-                apply_f(&mut steps, &mut state, &prefix);
-                apply_r_inv(&mut steps, &mut state, &prefix);
-                apply_f_inv(&mut steps, &mut state, &prefix);
+                apply_f(&mut steps, &mut state, &remaining);
+                apply_r(&mut steps, &mut state, &remaining);
+                apply_f_inv(&mut steps, &mut state, &remaining);
+                remaining.pop();
             }
             _ => {}
         }
@@ -54,7 +62,7 @@ pub fn braid_to_fib_steps(crossings: &[i32]) -> Vec<FibStep> {
     steps
 }
 
-fn apply_f(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
+fn apply_f(steps: &mut Vec<FibStep>, state: &mut FibState, remaining: &[i32]) {
     state.vec = matmul(f_matrix(), state.vec);
     state.basis = match state.basis {
         FusionBasis::Left => FusionBasis::Right,
@@ -65,11 +73,12 @@ fn apply_f(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
         op: FibOp::F,
         label: "F".into(),
         state: state.clone(),
-        braid_prefix: prefix.to_vec(),
+        braid_remaining: remaining.to_vec(),
+        matrix: f_matrix(),
     });
 }
 
-fn apply_f_inv(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
+fn apply_f_inv(steps: &mut Vec<FibStep>, state: &mut FibState, remaining: &[i32]) {
     state.vec = matmul(invert(f_matrix()), state.vec);
     state.basis = match state.basis {
         FusionBasis::Left => FusionBasis::Right,
@@ -80,14 +89,15 @@ fn apply_f_inv(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
         op: FibOp::FInv,
         label: "F⁻¹".into(),
         state: state.clone(),
-        braid_prefix: prefix.to_vec(),
+        braid_remaining: remaining.to_vec(),
+        matrix: invert(f_matrix()),
     });
 }
 
-fn apply_r(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
+fn apply_r(steps: &mut Vec<FibStep>, state: &mut FibState, remaining: &[i32]) {
     // ensure LEFT basis
     if let FusionBasis::Right = state.basis {
-        apply_f(steps, state, prefix);
+        apply_f(steps, state, remaining);
     }
 
     state.vec = matmul(r_matrix(), state.vec);
@@ -96,13 +106,14 @@ fn apply_r(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
         op: FibOp::R,
         label: "R".into(),
         state: state.clone(),
-        braid_prefix: prefix.to_vec(),
+        braid_remaining: remaining.to_vec(),
+        matrix: r_matrix(),
     });
 }
 
-fn apply_r_inv(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
+fn apply_r_inv(steps: &mut Vec<FibStep>, state: &mut FibState, remaining: &[i32]) {
     if let FusionBasis::Right = state.basis {
-        apply_f(steps, state, prefix);
+        apply_f(steps, state, remaining);
     }
 
     state.vec = matmul(invert(r_matrix()), state.vec);
@@ -111,7 +122,8 @@ fn apply_r_inv(steps: &mut Vec<FibStep>, state: &mut FibState, prefix: &[i32]) {
         op: FibOp::RInv,
         label: "R⁻¹".into(),
         state: state.clone(),
-        braid_prefix: prefix.to_vec(),
+        braid_remaining: remaining.to_vec(),
+        matrix: invert(r_matrix()),
     });
 }
 

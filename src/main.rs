@@ -173,7 +173,7 @@ impl eframe::App for BraidApp {
 
                     Tab::Fibonacci3 => {
                         if self.braid.strands != 3 {
-                            columns[1].label("This mode requires exactly 3 strands.");
+                            columns[1].colored_label(egui::Color32::RED, "Need exactly 3 strands");
                             return;
                         }
 
@@ -183,23 +183,47 @@ impl eframe::App for BraidApp {
                             for (i, step) in self.fib_steps.iter().enumerate() {
                                 ui.heading(format!("Step {}: {}", i, step.label));
 
-                                // draw braid prefix
-                                let temp_braid = Braid {
-                                    strands: 3,
-                                    crossings: step.braid_prefix.clone(),
-                                };
-
-                                let (rect, painter) = ui.allocate_painter(
-                                    egui::vec2(200.0, 200.0),
+                                let (resp, painter) = ui.allocate_painter(
+                                    egui::vec2(260.0, 340.0),
                                     egui::Sense::hover(),
                                 );
 
-                                temp_braid.draw(rect, painter);
+                                let rect = resp.rect;
 
-                                // draw fusion tree
-                                self.draw_fusion_tree(ui, step);
+                                // split vertically (TOP = braid, BOTTOM = tree)
+                                let split = rect.top() + rect.height() * 0.55;
 
-                                ui.separator();
+                                let _braid_rect = egui::Rect::from_min_max(
+                                    rect.min,
+                                    egui::pos2(rect.max.x, split),
+                                );
+
+                                let tree_rect = egui::Rect::from_min_max(
+                                    egui::pos2(rect.min.x, split),
+                                    rect.max,
+                                );
+
+                                // draw braid INTO SAME PAINTER
+                                let temp_braid = Braid {
+                                    strands: 3,
+                                    crossings: step.braid_remaining.clone(),
+                                };
+
+                                temp_braid.draw(
+                                    resp,
+                                    painter.clone(),
+                                );
+
+                                // draw tree directly below it
+                                self.draw_fusion_tree_in_rect(&painter, tree_rect, step);
+
+                                ui.monospace(format!(
+                                    "[[{:.2}, {:.2}],\n [{:.2}, {:.2}]]",
+                                    step.matrix[0][0],
+                                    step.matrix[0][1],
+                                    step.matrix[1][0],
+                                    step.matrix[1][1],
+                                ));
                             }
 
                             let total = compute_total(&self.fib_steps);
@@ -245,15 +269,24 @@ impl eframe::App for BraidApp {
     }
 }
 impl BraidApp {
-    fn _draw_braid_tab(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {}
-    fn draw_fusion_tree(&self, ui: &mut egui::Ui, step: &FibStep) {
-        let (resp, painter) = ui.allocate_painter(egui::vec2(220.0, 160.0), egui::Sense::hover());
+    fn draw_channel(painter: &egui::Painter, pos: egui::Pos2, v: &[Complex64; 2]) {
+        let prob0 = v[0].norm_sqr();
+        let prob1 = v[1].norm_sqr();
 
-        let rect = resp.rect;
+        let text = format!("1:{:.2} τ:{:.2}", prob0, prob1);
 
-        let top_y = rect.top() + 20.0;
+        painter.text(
+            pos,
+            egui::Align2::CENTER_CENTER,
+            text,
+            egui::FontId::proportional(13.0),
+            egui::Color32::LIGHT_BLUE,
+        );
+    }
+    fn draw_fusion_tree_in_rect(&self, painter: &egui::Painter, rect: egui::Rect, step: &FibStep) {
+        let top_y = rect.top() + 10.0;
         let mid_y = rect.center().y;
-        let bot_y = rect.bottom() - 20.0;
+        let bot_y = rect.bottom() - 10.0;
 
         let x1 = rect.left() + 40.0;
         let x2 = rect.center().x;
@@ -273,7 +306,7 @@ impl BraidApp {
                 painter.line_segment([mid, root], (2.0, egui::Color32::WHITE));
                 painter.line_segment([p3, root], (2.0, egui::Color32::WHITE));
 
-                Self::draw_channel(&painter, mid, &step.state.vec);
+                Self::draw_channel(painter, mid, &step.state.vec);
             }
             FusionBasis::Right => {
                 let mid = egui::pos2((x2 + x3) / 2.0, mid_y);
@@ -284,7 +317,7 @@ impl BraidApp {
                 painter.line_segment([mid, root], (2.0, egui::Color32::WHITE));
                 painter.line_segment([p1, root], (2.0, egui::Color32::WHITE));
 
-                Self::draw_channel(&painter, mid, &step.state.vec);
+                Self::draw_channel(painter, mid, &step.state.vec);
             }
         }
 
@@ -297,20 +330,5 @@ impl BraidApp {
                 egui::Color32::WHITE,
             );
         }
-    }
-
-    fn draw_channel(painter: &egui::Painter, pos: egui::Pos2, v: &[Complex64; 2]) {
-        let prob0 = v[0].norm_sqr();
-        let prob1 = v[1].norm_sqr();
-
-        let text = format!("1:{:.2} τ:{:.2}", prob0, prob1);
-
-        painter.text(
-            pos,
-            egui::Align2::CENTER_CENTER,
-            text,
-            egui::FontId::proportional(13.0),
-            egui::Color32::LIGHT_BLUE,
-        );
     }
 }
