@@ -10,7 +10,7 @@ pub struct Braid {
 
 impl Braid {
     pub fn new() -> Braid {
-        Braid::init(10)
+        Braid::init(3)
     }
     pub fn init(strands: u32) -> Braid {
         Braid {
@@ -20,6 +20,23 @@ impl Braid {
     }
 
     pub fn draw(&self, drawing_area: Response, painter: Painter) {
+        if self.crossings.is_empty() {
+            let rect = drawing_area.rect;
+
+            let horizontal_gap = rect.width() / (self.strands + 2) as f32;
+
+            for i in 1..=self.strands {
+                let x = rect.left() + i as f32 * horizontal_gap;
+
+                painter.line_segment(
+                    [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                    egui::Stroke::new(2.0, egui::Color32::WHITE),
+                );
+            }
+
+            return;
+        }
+
         for j in 1..(self.crossings.len() + 2) {
             for i in 1..(self.strands + 1) {
                 let vertical_gap = drawing_area.rect.height() / (self.crossings.len() + 3) as f32;

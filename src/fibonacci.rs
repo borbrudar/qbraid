@@ -54,9 +54,22 @@ pub fn r_matrix() -> [[Complex64; 2]; 2] {
     ]
 }
 
-pub fn matmul(a: [[Complex64; 2]; 2], v: [Complex64; 2]) -> [Complex64; 2] {
+pub fn matmulv(a: [[Complex64; 2]; 2], v: [Complex64; 2]) -> [Complex64; 2] {
     [
         a[0][0] * v[0] + a[0][1] * v[1],
         a[1][0] * v[0] + a[1][1] * v[1],
+    ]
+}
+
+pub fn matmul(a: [[Complex64; 2]; 2], b: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2] {
+    [
+        [
+            a[0][0] * b[0][0] + a[0][1] * b[1][0],
+            a[0][0] * b[0][1] + a[0][1] * b[1][1],
+        ],
+        [
+            a[1][0] * b[0][0] + a[1][1] * b[1][0],
+            a[1][0] * b[0][1] + a[1][1] * b[1][1],
+        ],
     ]
 }
