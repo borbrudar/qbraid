@@ -1,10 +1,12 @@
 mod braid;
 mod fibonacci;
 mod tree;
+mod search;
 
 use braid::*;
 use eframe::egui;
 use tree::*;
+use search::*;
 
 const TEXTSIZE: f32 = 40.0;
 
