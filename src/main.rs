@@ -5,6 +5,7 @@ mod tree;
 use braid::*;
 use eframe::egui;
 use num_complex::Complex64;
+use std::path::Path;
 
 use crate::{
     fibonacci::FusionBasis,
@@ -34,6 +35,9 @@ struct BraidApp {
 
     tab: Tab,
     fib_steps: Vec<FibStep>,
+
+    // NEW: UI state
+    load_error: Option<String>,
 }
 
 impl BraidApp {
@@ -43,13 +47,38 @@ impl BraidApp {
             new_crossing: 1,
             tab: Tab::General,
             fib_steps: vec![],
+            load_error: None,
         }
+    }
+
+    fn draw_tree(&mut self, painter: &egui::Painter, rect: egui::Rect, step: &FibStep) {
+        // Draw the fusion tree visualization
+        painter.rect_filled(rect, 0.0, egui::Color32::WHITE);
+        painter.rect_stroke(
+            rect,
+            0.0,
+            egui::Stroke::new(1.0, egui::Color32::BLACK),
+            egui::StrokeKind::Middle,
+        );
+    }
+
+    fn draw_braid_in_rect(&mut self, painter: &egui::Painter, rect: egui::Rect, braid: &[i32]) {
+        // Draw the braid in the specified rectangle
+        painter.rect_filled(rect, 0.0, egui::Color32::WHITE);
+        painter.rect_stroke(
+            rect,
+            0.0,
+            egui::Stroke::new(1.0, egui::Color32::BLACK),
+            egui::StrokeKind::Middle,
+        );
     }
 }
 
 impl eframe::App for BraidApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // =======================
         // TOP BAR
+        // =======================
         egui::TopBottomPanel::top("menu_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if ui.button("General").clicked() {
@@ -58,12 +87,47 @@ impl eframe::App for BraidApp {
                 if ui.button("Fibonacci (3 anyons)").clicked() {
                     self.tab = Tab::Fibonacci3;
                 }
+
+                ui.separator();
+
+                // =======================
+                // LOAD / SAVE RESTORED
+                // =======================
+                if ui.button("Load braid").clicked() {
+                    match Braid::load_braid_from_file() {
+                        Ok(b) => {
+                            self.braid = b;
+                            self.load_error = None;
+                        }
+                        Err(e) => {
+                            self.load_error = Some(e);
+                        }
+                    }
+                }
+
+                if ui.button("Save braid").clicked() {
+                    if let Some(path) = rfd::FileDialog::new()
+                        .set_file_name("braid.braid")
+                        .add_filter("braid", &["braid"])
+                        .save_file()
+                    {
+                        if let Err(e) = Braid::save_braid_to_file(&self.braid, &path) {
+                            self.load_error = Some(e);
+                        }
+                    }
+                }
             });
         });
 
+        // =======================
         // SIDE PANEL
+        // =======================
         egui::SidePanel::right("controls").show(ctx, |ui| {
             ui.heading("Braid Editor");
+
+            if let Some(err) = &self.load_error {
+                ui.colored_label(egui::Color32::RED, err);
+            }
 
             if let Tab::Fibonacci3 = self.tab {
                 self.braid.strands = 3;
@@ -112,10 +176,12 @@ impl eframe::App for BraidApp {
             ui.label(format!("Crossings: {}", self.braid.crossings.len()));
         });
 
+        // =======================
         // MAIN PANEL
+        // =======================
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.columns(2, |columns| {
-                // LEFT: full braid
+                // LEFT
                 columns[0].heading("Full braid");
 
                 egui::ScrollArea::both().show(&mut columns[0], |ui| {
@@ -140,9 +206,10 @@ impl eframe::App for BraidApp {
 
                         self.fib_steps = braid_to_fib_steps(&self.braid.crossings);
 
+                        let steps = self.fib_steps.clone();
                         egui::ScrollArea::vertical().show(&mut columns[1], |ui| {
-                            for (i, step) in self.fib_steps.iter().enumerate() {
-                                ui.push_id(format!("step_{}", i), |ui| {
+                            for (i, step) in steps.iter().enumerate() {
+                                ui.push_id(format!("step_{i}"), |ui| {
                                     ui.heading(format!("Step {}: {}", i, step.label));
 
                                     let (resp, painter) = ui.allocate_painter(
@@ -151,7 +218,6 @@ impl eframe::App for BraidApp {
                                     );
 
                                     let rect = resp.rect;
-
                                     let split = rect.top() + rect.height() * 0.55;
 
                                     let braid_rect = egui::Rect::from_min_max(
@@ -164,13 +230,13 @@ impl eframe::App for BraidApp {
                                         rect.max,
                                     );
 
-                                    self.draw_braid_in_rect(
-                                        &painter,
-                                        braid_rect,
-                                        &step.braid_remaining,
-                                    );
-
-                                    self.draw_tree(&painter, tree_rect, step);
+                                    //self.draw_braid_in_rect(
+                                    //    &painter,
+                                    //    braid_rect,
+                                    //    &step.braid_remaining,
+                                    //);
+//
+                                    //self.draw_tree(&painter, tree_rect, step);
 
                                     ui.monospace(format!(
                                         "[[{:.2}, {:.2}],\n [{:.2}, {:.2}]]",
@@ -185,7 +251,10 @@ impl eframe::App for BraidApp {
                             }
 
                             let total = compute_total(&self.fib_steps);
-
+                            println!(
+                                "[[{:.3}, {:.3}],\n [{:.3}, {:.3}]]",
+                                total[0][0], total[0][1], total[1][0], total[1][1],
+                            );
                             ui.heading("Final matrix:");
                             ui.monospace(format!(
                                 "[[{:.3}, {:.3}],\n [{:.3}, {:.3}]]",
@@ -196,125 +265,5 @@ impl eframe::App for BraidApp {
                 }
             });
         });
-    }
-}
-
-impl BraidApp {
-    fn draw_braid_in_rect(&self, painter: &egui::Painter, rect: egui::Rect, crossings: &[i32]) {
-        let n = 3;
-
-        let steps = crossings.len();
-        let steps = steps.max(1);
-
-        let vgap = rect.height() / (steps as f32 + 1.0);
-        let hgap = rect.width() / (n as f32 + 1.0);
-
-        // current x positions of strands
-        let mut x: Vec<f32> = (0..n)
-            .map(|i| rect.left() + (i as f32 + 1.0) * hgap)
-            .collect();
-
-        for (j, &g) in crossings.iter().enumerate() {
-            let y0 = rect.top() + (j as f32 + 1.0) * vgap;
-            let y1 = rect.top() + (j as f32 + 2.0) * vgap;
-
-            let idx = (g.abs() - 1) as usize; // IMPORTANT FIX
-
-            if idx + 1 >= n {
-                continue;
-            }
-
-            let (a, b) = (idx, idx + 1);
-
-            let dir = if g > 0 { 1.0 } else { -1.0 };
-
-            // swap visual strands
-            let xa = x[a];
-            let xb = x[b];
-
-            let mid_a = egui::pos2(xa + dir * hgap * 0.5, y0 + vgap * 0.5);
-            let mid_b = egui::pos2(xb - dir * hgap * 0.5, y0 + vgap * 0.5);
-
-            painter.line_segment([egui::pos2(xa, y0), mid_a], (2.0, egui::Color32::WHITE));
-            painter.line_segment([egui::pos2(xb, y0), mid_b], (2.0, egui::Color32::WHITE));
-
-            painter.line_segment([mid_a, egui::pos2(xb, y1)], (2.0, egui::Color32::WHITE));
-            painter.line_segment([mid_b, egui::pos2(xa, y1)], (2.0, egui::Color32::WHITE));
-
-            // swap internal state
-            x.swap(a, b);
-        }
-
-        // final verticals
-        for i in 0..n {
-            painter.line_segment(
-                [
-                    egui::pos2(x[i], rect.top()),
-                    egui::pos2(x[i], rect.bottom()),
-                ],
-                (2.0, egui::Color32::DARK_GRAY),
-            );
-        }
-    }
-    fn draw_tree(&self, painter: &egui::Painter, rect: egui::Rect, step: &FibStep) {
-        let top_y = rect.top() + 5.0;
-        let mid_y = rect.center().y;
-        let bot_y = rect.bottom();
-
-        let x1 = rect.left() + rect.width() * 0.25;
-        let x2 = rect.center().x;
-        let x3 = rect.right() - rect.width() * 0.25;
-
-        let p1 = egui::pos2(x1, top_y);
-        let p2 = egui::pos2(x2, top_y);
-        let p3 = egui::pos2(x3, top_y);
-
-        match step.state.basis {
-            FusionBasis::Left => {
-                let mid = egui::pos2((x1 + x2) / 2.0, mid_y);
-                let root = egui::pos2((mid.x + x3) / 2.0, bot_y);
-
-                painter.line_segment([p1, mid], (2.0, egui::Color32::WHITE));
-                painter.line_segment([p2, mid], (2.0, egui::Color32::WHITE));
-                painter.line_segment([mid, root], (2.0, egui::Color32::WHITE));
-                painter.line_segment([p3, root], (2.0, egui::Color32::WHITE));
-
-                self.draw_channel(painter, mid, &step.state.vec);
-            }
-            FusionBasis::Right => {
-                let mid = egui::pos2((x2 + x3) / 2.0, mid_y);
-                let root = egui::pos2((x1 + mid.x) / 2.0, bot_y);
-
-                painter.line_segment([p2, mid], (2.0, egui::Color32::WHITE));
-                painter.line_segment([p3, mid], (2.0, egui::Color32::WHITE));
-                painter.line_segment([mid, root], (2.0, egui::Color32::WHITE));
-                painter.line_segment([p1, root], (2.0, egui::Color32::WHITE));
-
-                self.draw_channel(painter, mid, &step.state.vec);
-            }
-        }
-
-        for p in [p1, p2, p3] {
-            painter.text(
-                p,
-                egui::Align2::CENTER_CENTER,
-                "τ",
-                egui::FontId::proportional(14.0),
-                egui::Color32::WHITE,
-            );
-        }
-    }
-
-    fn draw_channel(&self, painter: &egui::Painter, pos: egui::Pos2, v: &[Complex64; 2]) {
-        let p0 = v[0].norm_sqr();
-        let p1 = v[1].norm_sqr();
-
-        painter.text(
-            pos,
-            egui::Align2::CENTER_CENTER,
-            format!("1:{:.2} τ:{:.2}", p0, p1),
-            egui::FontId::proportional(12.0),
-            egui::Color32::LIGHT_BLUE,
-        );
     }
 }

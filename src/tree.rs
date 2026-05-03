@@ -1,12 +1,16 @@
 use crate::fibonacci::*;
 use num_complex::Complex64;
 
+// =========================
+// TYPES
+// =========================
+
 #[derive(Clone)]
 pub enum FibOp {
-    F,
-    FInv,
-    R,
-    RInv,
+    Sigma1,
+    Sigma1Inv,
+    Sigma2,
+    Sigma2Inv,
 }
 
 #[derive(Clone)]
@@ -14,14 +18,13 @@ pub struct FibStep {
     pub op: FibOp,
     pub label: String,
 
-    pub state: FibState,             // for fusion tree drawing
-    pub matrix: [[Complex64; 2]; 2], // full operator up to this step
+    pub matrix: [[Complex64; 2]; 2], // cumulative unitary
 
-    pub braid_remaining: Vec<i32>, // what braid is still visible
+    pub braid_remaining: Vec<i32>, // UI-only (visualization)
 }
 
 // =========================
-// BASIC MATRIX UTILITIES
+// MATRIX HELPERS
 // =========================
 
 fn identity() -> [[Complex64; 2]; 2] {
@@ -32,11 +35,49 @@ fn identity() -> [[Complex64; 2]; 2] {
 }
 
 fn invert(m: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2] {
-    // unitary inverse = conjugate transpose
     [
         [m[0][0].conj(), m[1][0].conj()],
         [m[0][1].conj(), m[1][1].conj()],
     ]
+}
+
+fn matmul(
+    a: [[Complex64; 2]; 2],
+    b: [[Complex64; 2]; 2],
+) -> [[Complex64; 2]; 2] {
+    [
+        [
+            a[0][0] * b[0][0] + a[0][1] * b[1][0],
+            a[0][0] * b[0][1] + a[0][1] * b[1][1],
+        ],
+        [
+            a[1][0] * b[0][0] + a[1][1] * b[1][0],
+            a[1][0] * b[0][1] + a[1][1] * b[1][1],
+        ],
+    ]
+}
+
+// =========================
+// BRAID GENERATORS
+// =========================
+
+fn sigma1() -> [[Complex64; 2]; 2] {
+    r_matrix()
+}
+
+fn sigma1_inv() -> [[Complex64; 2]; 2] {
+    invert(sigma1())
+}
+
+// σ₂ = F⁻¹ R F
+fn sigma2() -> [[Complex64; 2]; 2] {
+    let f = f_matrix();
+    let r = r_matrix();
+    matmul(matmul(invert(f), r), f)
+}
+
+fn sigma2_inv() -> [[Complex64; 2]; 2] {
+    invert(sigma2())
 }
 
 // =========================
@@ -44,158 +85,49 @@ fn invert(m: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2] {
 // =========================
 
 pub fn braid_to_fib_steps(crossings: &[i32]) -> Vec<FibStep> {
-    let mut steps = vec![];
+    let mut steps = Vec::new();
 
-    let mut state = FibState::new();
     let mut U = identity();
 
-    let mut remaining = crossings.to_vec();
+    // IMPORTANT:
+    // forward multiplication = left action
+    for (i, &g) in crossings.iter().enumerate() {
+        let op = match g {
+            1 => sigma1(),
+            -1 => sigma1_inv(),
+            2 => sigma2(),
+            -2 => sigma2_inv(),
+            _ => continue,
+        };
 
-    // process braid from RIGHT → LEFT (unweaving)
-    for g in crossings.iter().rev() {
-        match g {
-            // σ₁
-            1 => apply_r_inv(&mut steps, &mut state, &mut U, &remaining),
+        // U = op * U
+        U = matmul(op, U);
 
-            // σ₁⁻¹
-            -1 => apply_r(&mut steps, &mut state, &mut U, &remaining),
-
-            // σ₂
-            2 => {
-                apply_f(&mut steps, &mut state, &mut U, &remaining);
-                apply_r_inv(&mut steps, &mut state, &mut U, &remaining);
-                apply_f_inv(&mut steps, &mut state, &mut U, &remaining);
-            }
-
-            // σ₂⁻¹
-            -2 => {
-                apply_f(&mut steps, &mut state, &mut U, &remaining);
-                apply_r(&mut steps, &mut state, &mut U, &remaining);
-                apply_f_inv(&mut steps, &mut state, &mut U, &remaining);
-            }
-
-            _ => {}
-        }
-
-        // visually remove last crossing (unwind)
-        remaining.pop();
+        steps.push(FibStep {
+            op: match g {
+                1 => FibOp::Sigma1,
+                -1 => FibOp::Sigma1Inv,
+                2 => FibOp::Sigma2,
+                -2 => FibOp::Sigma2Inv,
+                _ => unreachable!(),
+            },
+            label: format!("σ{}", g),
+            matrix: U,
+            braid_remaining: crossings[i + 1..].to_vec(),
+        });
     }
 
-    // add a few "empty braid" steps so final configuration is visible
+    // final “identity view” padding (UI convenience)
     for _ in 0..3 {
         steps.push(FibStep {
-            op: FibOp::F,
-            label: "unwound".into(),
-            state: state.clone(),
+            op: FibOp::Sigma1,
+            label: "end".into(),
             matrix: U,
             braid_remaining: vec![],
         });
     }
 
     steps
-}
-
-// =========================
-// OPERATIONS
-// =========================
-
-fn apply_f(
-    steps: &mut Vec<FibStep>,
-    state: &mut FibState,
-    U: &mut [[Complex64; 2]; 2],
-    remaining: &[i32],
-) {
-    let F = f_matrix();
-
-    state.vec = matmulv(F, state.vec);
-    *U = matmul(F, *U);
-
-    state.basis = match state.basis {
-        FusionBasis::Left => FusionBasis::Right,
-        FusionBasis::Right => FusionBasis::Left,
-    };
-
-    steps.push(FibStep {
-        op: FibOp::F,
-        label: "F".into(),
-        state: state.clone(),
-        matrix: *U,
-        braid_remaining: remaining.to_vec(),
-    });
-}
-
-fn apply_f_inv(
-    steps: &mut Vec<FibStep>,
-    state: &mut FibState,
-    U: &mut [[Complex64; 2]; 2],
-    remaining: &[i32],
-) {
-    let F_inv = invert(f_matrix());
-
-    state.vec = matmulv(F_inv, state.vec);
-    *U = matmul(F_inv, *U);
-
-    state.basis = match state.basis {
-        FusionBasis::Left => FusionBasis::Right,
-        FusionBasis::Right => FusionBasis::Left,
-    };
-
-    steps.push(FibStep {
-        op: FibOp::FInv,
-        label: "F⁻¹".into(),
-        state: state.clone(),
-        matrix: *U,
-        braid_remaining: remaining.to_vec(),
-    });
-}
-
-fn apply_r(
-    steps: &mut Vec<FibStep>,
-    state: &mut FibState,
-    U: &mut [[Complex64; 2]; 2],
-    remaining: &[i32],
-) {
-    // ensure LEFT basis before applying R
-    if let FusionBasis::Right = state.basis {
-        apply_f(steps, state, U, remaining);
-    }
-
-    let R = r_matrix();
-
-    state.vec = matmulv(R, state.vec);
-    *U = matmul(R, *U);
-
-    steps.push(FibStep {
-        op: FibOp::R,
-        label: "R".into(),
-        state: state.clone(),
-        matrix: *U,
-        braid_remaining: remaining.to_vec(),
-    });
-}
-
-fn apply_r_inv(
-    steps: &mut Vec<FibStep>,
-    state: &mut FibState,
-    U: &mut [[Complex64; 2]; 2],
-    remaining: &[i32],
-) {
-    if let FusionBasis::Right = state.basis {
-        apply_f(steps, state, U, remaining);
-    }
-
-    let R_inv = invert(r_matrix());
-
-    state.vec = matmulv(R_inv, state.vec);
-    *U = matmul(R_inv, *U);
-
-    steps.push(FibStep {
-        op: FibOp::RInv,
-        label: "R⁻¹".into(),
-        state: state.clone(),
-        matrix: *U,
-        braid_remaining: remaining.to_vec(),
-    });
 }
 
 // =========================
