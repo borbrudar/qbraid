@@ -190,20 +190,3 @@ impl Braid {
         Ok(Braid { strands, crossings })
     }
 }
-
-
-/*
-hadamard notes:
- e^3.4558i * (1/sqrt2) = (-0.6718293588421513-0.22055682396548937i)
- * 
-(1  1
- 1 -1)
-kot aproksimacija za 
-1/sqrt2 * 
-(1  1
- 1 -1)
- dobimo
- (-0.6712528634337573-0.22163276682833138j)
- 
-
-*/

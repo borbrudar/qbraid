@@ -1,75 +1,52 @@
 use num_complex::Complex64;
 
-#[derive(Clone, Copy, Debug)]
-pub enum FusionBasis {
-    Left,  // (ττ)τ
-    Right, // τ(ττ)
+const PI: f64 = std::f64::consts::PI;
+
+fn exp(theta: f64) -> Complex64 {
+    Complex64::from_polar(1.0, theta)
 }
 
-#[derive(Clone, Debug)]
-pub struct FibState {
-    pub basis: FusionBasis,
-    pub vec: [Complex64; 2], // amplitudes for channels (1, τ)
-}
-
-impl FibState {
-    pub fn new() -> Self {
-        Self {
-            basis: FusionBasis::Left,
-            vec: [Complex64::new(1.0, 0.0), Complex64::new(0.0, 0.0)],
-        }
-    }
-}
-
-pub fn phi() -> f64 {
+fn phi() -> f64 {
     (1.0 + 5.0_f64.sqrt()) / 2.0
 }
 
-pub fn f_matrix() -> [[Complex64; 2]; 2] {
-    let phi = phi();
-    let inv_phi = 1.0 / phi;
-    let sqrt_inv_phi = inv_phi.sqrt();
+fn sqrt_phi_inv() -> f64 {
+    (1.0 / phi()).sqrt()
+}
 
+fn invert(m: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2] {
     [
-        [
-            Complex64::new(inv_phi, 0.0),
-            Complex64::new(sqrt_inv_phi, 0.0),
-        ],
-        [
-            Complex64::new(sqrt_inv_phi, 0.0),
-            Complex64::new(-inv_phi, 0.0),
-        ],
+        [m[0][0].conj(), m[1][0].conj()],
+        [m[0][1].conj(), m[1][1].conj()],
     ]
 }
 
-pub fn r_matrix() -> [[Complex64; 2]; 2] {
-    use std::f64::consts::PI;
-
-    let r1 = Complex64::from_polar(1.0, -4.0 * PI / 5.0);
-    let r_tau = Complex64::from_polar(1.0, 3.0 * PI / 5.0);
+// oba braidinga + inverzi
+pub fn sigma1() -> [[Complex64; 2]; 2] {
+    let e1 = exp(-4.0 * PI / 5.0);
+    let e2 = exp(3.0 * PI / 5.0);
 
     [
-        [r1, Complex64::new(0.0, 0.0)],
-        [Complex64::new(0.0, 0.0), r_tau],
+        [e1, Complex64::new(0.0, 0.0)],
+        [Complex64::new(0.0, 0.0), e2],
     ]
 }
 
-pub fn matmulv(a: [[Complex64; 2]; 2], v: [Complex64; 2]) -> [Complex64; 2] {
-    [
-        a[0][0] * v[0] + a[0][1] * v[1],
-        a[1][0] * v[0] + a[1][1] * v[1],
-    ]
+pub fn sigma2() -> [[Complex64; 2]; 2] {
+    let phi_inv = 1.0 / phi();
+    let phi_inv_sqrt = sqrt_phi_inv();
+
+    let a = phi_inv * exp(4.0 * PI / 5.0);
+    let b = phi_inv_sqrt * exp(-3.0 * PI / 5.0);
+    let c = Complex64::from(-phi_inv);
+
+    [[a, b], [b, c]]
 }
 
-pub fn matmul(a: [[Complex64; 2]; 2], b: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2] {
-    [
-        [
-            a[0][0] * b[0][0] + a[0][1] * b[1][0],
-            a[0][0] * b[0][1] + a[0][1] * b[1][1],
-        ],
-        [
-            a[1][0] * b[0][0] + a[1][1] * b[1][0],
-            a[1][0] * b[0][1] + a[1][1] * b[1][1],
-        ],
-    ]
+pub fn sigma1_inv() -> [[Complex64; 2]; 2] {
+    invert(sigma1())
+}
+
+pub fn sigma2_inv() -> [[Complex64; 2]; 2] {
+    invert(sigma2())
 }
