@@ -311,21 +311,21 @@ if let Some(rx) = &self.search.rx {
 
                 let f = egui::FontId::proportional(TEXTSIZE);
 
-                cols[1].label(egui::RichText::new("Raw").size(TEXTSIZE).strong());
-                cols[1].label(
-                    egui::RichText::new(format!(
-                        "[[{:.4}, {:.4}],\n [{:.4}, {:.4}]]",
-                        res.raw[0][0],
-                        res.raw[0][1],
-                        res.raw[1][0],
-                        res.raw[1][1],
-                    ))
-                    .font(f.clone()),
-                );
+                //cols[1].label(egui::RichText::new("Raw").size(TEXTSIZE).strong());
+                //cols[1].label(
+                //    egui::RichText::new(format!(
+                //        "[[{:.4}, {:.4}],\n [{:.4}, {:.4}]]",
+                //        res.raw[0][0],
+                //        res.raw[0][1],
+                //        res.raw[1][0],
+                //        res.raw[1][1],
+                //    ))
+                //    .font(f.clone()),
+                //);
 
-                cols[1].separator();
+                //cols[1].separator();
 
-                cols[1].label(egui::RichText::new("Normalized").size(TEXTSIZE).strong());
+                //cols[1].label(egui::RichText::new("Normalized").size(TEXTSIZE).strong());
                 cols[1].label(
                     egui::RichText::new(format!(
                         "[[{:.4}, {:.4}],\n [{:.4}, {:.4}]]",
