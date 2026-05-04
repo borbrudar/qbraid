@@ -158,3 +158,24 @@ pub fn brute_force_approx(
 
     (best_word, best_dist, best_mat)
 }
+
+pub struct SearchResult {
+    pub word: Vec<i32>,
+    pub distance: f64,
+}
+
+pub fn find_braid(
+    target: Mat2,
+    depth: usize,
+    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> Result<SearchResult, String> {
+    let alphabet = &[1, -1, 2, -2];
+
+    let (word, dist, _mat) = brute_force_approx(target, depth, alphabet);
+
+    if stop.load(std::sync::atomic::Ordering::Relaxed) {
+        return Err("Search stopped".into());
+    }
+
+    Ok(SearchResult { word, distance: dist })
+}
