@@ -3,7 +3,7 @@ use num_complex::Complex64;
 
 #[derive(Clone, Debug)]
 pub struct FibResult {
-    pub raw: [[Complex64; 2]; 2],
+    pub _raw: [[Complex64; 2]; 2],
     pub normalized: [[Complex64; 2]; 2],
 }
 
@@ -56,7 +56,7 @@ pub fn evaluate_braid(crossings: &[i32]) -> FibResult {
     }
 
     FibResult {
-        raw: U,
+        _raw: U,
         normalized: normalize(U),
     }
 }

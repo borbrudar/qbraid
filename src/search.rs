@@ -1,6 +1,5 @@
 use crate::fibonacci::*;
 use num_complex::Complex64;
-use rand::Rng;
 use std::f64::consts::PI;
 
 type Mat2 = [[Complex64; 2]; 2];
@@ -26,45 +25,15 @@ fn matmul(a: Mat2, b: Mat2) -> Mat2 {
 }
 
 fn phase_invariant_distance(a: Mat2, b: Mat2) -> f64 {
-    // U†V trace overlap
-    let udag_v =
-        a[0][0].conj() * b[0][0]
-            + a[0][1].conj() * b[0][1]
-            + a[1][0].conj() * b[1][0]
-            + a[1][1].conj() * b[1][1];
+    let udag_v = a[0][0].conj() * b[0][0]
+        + a[0][1].conj() * b[0][1]
+        + a[1][0].conj() * b[1][0]
+        + a[1][1].conj() * b[1][1];
 
     let x = (udag_v.norm() / 2.0).clamp(0.0, 1.0);
 
     x.acos()
 }
-
-/*
-fn phase_invariant_distance(a: Mat2, b: Mat2) -> f64 {
-    // find best global phase alignment using trace overlap
-    let trace = a[0][0] * b[0][0].conj()
-    + a[0][1] * b[0][1].conj()
-    + a[1][0] * b[1][0].conj()
-    + a[1][1] * b[1][1].conj();
-    
-    let phase = trace / trace.norm().max(1e-12);
-    
-    let b_aligned = [
-        [b[0][0] * phase, b[0][1] * phase],
-        [b[1][0] * phase, b[1][1] * phase],
-        ];
-        
-        // Frobenius norm
-        let mut sum = 0.0;
-        for i in 0..2 {
-            for j in 0..2 {
-                let d = a[i][j] - b_aligned[i][j];
-                sum += d.norm_sqr();
-            }
-        }
-        
-        sum.sqrt()
-    }
-*/
 
 pub fn random_unitary() -> Mat2 {
     let u1: f64 = rand::random();
@@ -78,15 +47,10 @@ pub fn random_unitary() -> Mat2 {
     let a = Complex64::from_polar(theta.cos(), phi);
     let b = Complex64::from_polar(theta.sin(), psi);
 
-    // SU(2) parameterization
-    [
-        [a, b],
-        [-b.conj(), a.conj()],
-    ]
+    [[a, b], [-b.conj(), a.conj()]]
 }
 
 // braid eval
-
 fn apply_generator(u: Mat2, g: i32) -> Mat2 {
     let op = match g {
         1 => sigma1(),
@@ -106,7 +70,6 @@ fn evaluate_word(word: &[i32]) -> Mat2 {
     }
     u
 }
-
 
 pub fn brute_force_approx(
     target: Mat2,
@@ -191,5 +154,8 @@ pub fn find_braid(
         return Err("Search stopped".into());
     }
 
-    Ok(SearchResult { word, distance: dist })
+    Ok(SearchResult {
+        word,
+        distance: dist,
+    })
 }

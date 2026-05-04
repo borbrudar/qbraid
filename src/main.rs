@@ -1,7 +1,7 @@
 mod braid;
 mod fibonacci;
-mod tree;
 mod search;
+mod tree;
 
 use braid::*;
 use eframe::egui;
@@ -10,8 +10,9 @@ use search::*;
 
 use std::{
     sync::{
+        Arc,
         atomic::{AtomicBool, Ordering},
-        mpsc, Arc,
+        mpsc,
     },
     thread,
     time::Instant,
@@ -28,9 +29,6 @@ enum Tab {
     Fibonacci3,
 }
 
-// =======================
-// COMPLEX INPUT UI TYPE
-// =======================
 #[derive(Clone, Default)]
 struct CInput {
     re: f32,
@@ -43,9 +41,6 @@ impl CInput {
     }
 }
 
-// =======================
-// SEARCH STATE
-// =======================
 struct SearchState {
     target: [[CInput; 2]; 2],
     depth: usize,
@@ -64,14 +59,8 @@ impl Default for SearchState {
     fn default() -> Self {
         Self {
             target: [
-                [
-                    CInput { re: 1.0, im: 0.0 },
-                    CInput { re: 0.0, im: 0.0 },
-                ],
-                [
-                    CInput { re: 0.0, im: 0.0 },
-                    CInput { re: 1.0, im: 0.0 },
-                ],
+                [CInput { re: 1.0, im: 0.0 }, CInput { re: 0.0, im: 0.0 }],
+                [CInput { re: 0.0, im: 0.0 }, CInput { re: 1.0, im: 0.0 }],
             ],
             depth: 6,
             searching: false,
@@ -84,9 +73,6 @@ impl Default for SearchState {
     }
 }
 
-// =======================
-// APP
-// =======================
 #[derive(Default)]
 struct BraidApp {
     braid: Braid,
@@ -99,23 +85,8 @@ struct BraidApp {
 }
 
 impl BraidApp {
-    fn new() -> Self {
-        Self {
-            braid: Braid::new(),
-            new_crossing: 0,
-            tab: Tab::General,
-            load_error: None,
-            search: SearchState::default(),
-        }
-    }
-
-    // =======================
-    // START SEARCH THREAD
-    // =======================
     fn start_search(&mut self) {
-        let target = self.search.target.clone().map(|row| {
-            row.map(|c| c.to_c())
-        });
+        let target = self.search.target.clone().map(|row| row.map(|c| c.to_c()));
 
         let depth = self.search.depth;
         let stop = self.search.stop.clone();
@@ -135,12 +106,8 @@ impl BraidApp {
     }
 }
 
-// =======================
-// EGUI APP
-// =======================
 impl eframe::App for BraidApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // update timer
         if self.search.searching {
             if let Some(t) = self.search.start {
                 self.search.elapsed = t.elapsed().as_secs_f32();
@@ -148,31 +115,25 @@ impl eframe::App for BraidApp {
             ctx.request_repaint();
         }
 
-// receive result
-if let Some(rx) = &self.search.rx {
-    if let Ok(result) = rx.try_recv() {
-        self.search.searching = false;
+        if let Some(rx) = &self.search.rx {
+            if let Ok(result) = rx.try_recv() {
+                self.search.searching = false;
 
-        match result {
-            Ok(res) => {
-                self.braid = Braid {
-                    strands: 3,
-                    crossings: res.word,
-                };
+                match result {
+                    Ok(res) => {
+                        self.braid = Braid {
+                            strands: 3,
+                            crossings: res.word,
+                        };
 
-                self.search.error = Some(format!(
-                    "Best error (distance): {:.6}",
-                    res.distance
-                ));
+                        self.search.error =
+                            Some(format!("Best error (distance): {:.6}", res.distance));
+                    }
+                    Err(e) => self.search.error = Some(e),
+                }
             }
-            Err(e) => self.search.error = Some(e),
         }
-    }
-}
 
-        // =======================
-        // TOP BAR
-        // =======================
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.tab, Tab::General, "General");
@@ -198,9 +159,6 @@ if let Some(rx) = &self.search.rx {
             });
         });
 
-        // =======================
-        // SIDE PANEL
-        // =======================
         egui::SidePanel::right("side").show(ctx, |ui| {
             ui.heading("Controls");
 
@@ -220,7 +178,9 @@ if let Some(rx) = &self.search.rx {
                 if ui.button("Remove strand").clicked() {
                     if self.braid.strands > 2 {
                         self.braid.strands -= 1;
-                        self.braid.crossings.retain(|g| (g.abs() as u32) < self.braid.strands);
+                        self.braid
+                            .crossings
+                            .retain(|g| (g.abs() as u32) < self.braid.strands);
                     }
                 }
             } else {
@@ -245,9 +205,6 @@ if let Some(rx) = &self.search.rx {
 
             ui.separator();
 
-            // =======================
-            // SEARCH UI
-            // =======================
             ui.heading("Search target");
 
             for i in 0..2 {
@@ -291,20 +248,16 @@ if let Some(rx) = &self.search.rx {
             ui.label(format!("Crossings: {}", self.braid.crossings.len()));
         });
 
-        // =======================
-        // MAIN VIEW
-        // =======================
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.columns(2, |cols| {
-                // LEFT: braid always visible
                 cols[0].heading("Braid");
 
                 egui::ScrollArea::both().show(&mut cols[0], |ui| {
-                    let (r, p) = ui.allocate_painter(egui::vec2(600.0, 1200.0), egui::Sense::hover());
+                    let (r, p) =
+                        ui.allocate_painter(egui::vec2(600.0, 1200.0), egui::Sense::hover());
                     self.braid.draw(r, p);
                 });
 
-                // RIGHT: result
                 cols[1].label(egui::RichText::new("Result").size(TEXTSIZE).strong());
 
                 let res = evaluate_braid(&self.braid.crossings);

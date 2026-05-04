@@ -9,16 +9,6 @@ pub struct Braid {
 }
 
 impl Braid {
-    pub fn new() -> Braid {
-        Braid::init(3)
-    }
-    pub fn init(strands: u32) -> Braid {
-        Braid {
-            strands: strands,
-            crossings: vec![],
-        }
-    }
-
     pub fn draw(&self, drawing_area: Response, painter: Painter) {
         if self.crossings.is_empty() {
             let rect = drawing_area.rect;
