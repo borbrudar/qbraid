@@ -25,32 +25,46 @@ fn matmul(a: Mat2, b: Mat2) -> Mat2 {
     ]
 }
 
+fn phase_invariant_distance(a: Mat2, b: Mat2) -> f64 {
+    // U†V trace overlap
+    let udag_v =
+        a[0][0].conj() * b[0][0]
+            + a[0][1].conj() * b[0][1]
+            + a[1][0].conj() * b[1][0]
+            + a[1][1].conj() * b[1][1];
 
+    let x = (udag_v.norm() / 2.0).clamp(0.0, 1.0);
+
+    x.acos()
+}
+
+/*
 fn phase_invariant_distance(a: Mat2, b: Mat2) -> f64 {
     // find best global phase alignment using trace overlap
     let trace = a[0][0] * b[0][0].conj()
-        + a[0][1] * b[0][1].conj()
-        + a[1][0] * b[1][0].conj()
-        + a[1][1] * b[1][1].conj();
-
+    + a[0][1] * b[0][1].conj()
+    + a[1][0] * b[1][0].conj()
+    + a[1][1] * b[1][1].conj();
+    
     let phase = trace / trace.norm().max(1e-12);
-
+    
     let b_aligned = [
         [b[0][0] * phase, b[0][1] * phase],
         [b[1][0] * phase, b[1][1] * phase],
-    ];
-
-    // Frobenius norm
-    let mut sum = 0.0;
-    for i in 0..2 {
-        for j in 0..2 {
-            let d = a[i][j] - b_aligned[i][j];
-            sum += d.norm_sqr();
+        ];
+        
+        // Frobenius norm
+        let mut sum = 0.0;
+        for i in 0..2 {
+            for j in 0..2 {
+                let d = a[i][j] - b_aligned[i][j];
+                sum += d.norm_sqr();
+            }
         }
+        
+        sum.sqrt()
     }
-
-    sum.sqrt()
-}
+*/
 
 pub fn random_unitary() -> Mat2 {
     let u1: f64 = rand::random();

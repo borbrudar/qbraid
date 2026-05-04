@@ -29,15 +29,16 @@ fn matmul(a: [[Complex64; 2]; 2], b: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2]
 
 // remove global phase
 fn normalize(m: [[Complex64; 2]; 2]) -> [[Complex64; 2]; 2] {
-    let phase = m[0][0] / m[0][0].norm(); // unit complex phase
-    let inv = phase.conj();
+    let det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+
+    let phase = (det.arg() * 0.5).cos() + Complex64::i() * (det.arg() * 0.5).sin();
+    let inv_phase = phase.conj();
 
     [
-        [m[0][0] * inv, m[0][1] * inv],
-        [m[1][0] * inv, m[1][1] * inv],
+        [m[0][0] * inv_phase, m[0][1] * inv_phase],
+        [m[1][0] * inv_phase, m[1][1] * inv_phase],
     ]
 }
-
 
 pub fn evaluate_braid(crossings: &[i32]) -> FibResult {
     let mut U = identity();
